@@ -37,6 +37,8 @@ DSH 插件：折叠左侧栏里的插件入口，把不常用的行收起来。
 
 ## 安装
 
+远端：待补（本机目录安装，无远端仓库）。
+
 ```bash
 plugin_manager install_bundle /Users/Treydong/Desktop/40_项目库/sidebar-plugin-fold
 ```
