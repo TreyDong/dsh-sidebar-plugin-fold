@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Sidebar plugin fold",
+    "description": "Folds the plugin entries in the left sidebar: hide the rows you rarely use and restore them from the More menu."
+  }
+}

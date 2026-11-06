@@ -1,0 +1,4 @@
+- insert:
+    - id: sidebar-plugin-fold
+      name: '@local/sidebar-plugin-fold'
+      config: {}
