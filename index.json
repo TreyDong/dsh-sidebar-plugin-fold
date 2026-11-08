@@ -1,0 +1,64 @@
+{
+  "format": 1,
+  "title": {
+    "en": "DSH sidebar helpers",
+    "zh": "DSH 侧栏小工具"
+  },
+  "description": {
+    "en": "Small sidebar utilities for DeepSeek Harness.",
+    "zh": "DeepSeek Harness 的侧栏小工具。"
+  },
+  "metadata": {
+    "categories": {
+      "sidebar": {
+        "title": {
+          "en": "Sidebar",
+          "zh": "侧栏"
+        }
+      }
+    },
+    "labels": {},
+    "sortKeys": {}
+  },
+  "plugins": [
+    {
+      "name": "@local/sidebar-plugin-fold",
+      "title": {
+        "en": "Sidebar plugin fold",
+        "zh": "侧栏插件折叠"
+      },
+      "description": {
+        "en": "Folds the plugin entries in the left sidebar: hide the rows you rarely use and restore them from the More menu.",
+        "zh": "折叠左侧栏的插件入口：收起不常用的行，需要时从「更多」菜单里恢复。"
+      },
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0Ij4KICA8cmVjdCB4PSI4IiB5PSIxMCIgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ0IiByeD0iOCIgZmlsbD0iI2U4ZjFmYSIgc3Ryb2tlPSIjM2Y2ZjlmIiBzdHJva2Utd2lkdGg9IjMiLz4KICA8cmVjdCB4PSIxNCIgeT0iMTYiIHdpZHRoPSIxNCIgaGVpZ2h0PSIzMiIgcng9IjQiIGZpbGw9IiMzZjg2YzQiLz4KICA8cmVjdCB4PSIzMyIgeT0iMTciIHdpZHRoPSIxOCIgaGVpZ2h0PSI1IiByeD0iMi41IiBmaWxsPSIjOGZiNmQ2Ii8+CiAgPHJlY3QgeD0iMzMiIHk9IjI2IiB3aWR0aD0iMTgiIGhlaWdodD0iNSIgcng9IjIuNSIgZmlsbD0iIzhmYjZkNiIvPgogIDxyZWN0IHg9IjMzIiB5PSIzNSIgd2lkdGg9IjE4IiBoZWlnaHQ9IjUiIHJ4PSIyLjUiIGZpbGw9IiM4ZmI2ZDYiLz4KICA8cGF0aCBkPSJNMTggNDAgTDIzIDM0IEwyOCA0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMWM0ZjdkIiBzdHJva2Utd2lkdGg9IjMuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=",
+      "author": "TreyDong",
+      "repository": {
+        "url": "https://github.com/TreyDong/dsh-sidebar-plugin-fold"
+      },
+      "metadata": {
+        "category": "sidebar",
+        "keywords": [
+          "sidebar",
+          "plugins",
+          "fold",
+          "collapse"
+        ],
+        "labels": [],
+        "sortKeys": {}
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "publishTimestamp": 1793978135,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/TreyDong/dsh-sidebar-plugin-fold.git",
+            "commit": "01db3dafd113db2ca0ee0d3f6f47d8967f15a8ca"
+          },
+          "engines": {}
+        }
+      ]
+    }
+  ]
+}
