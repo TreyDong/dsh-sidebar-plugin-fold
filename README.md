@@ -37,11 +37,22 @@ DSH 插件：折叠左侧栏里的插件入口，把不常用的行收起来。
 
 ## 安装
 
-远端：待补（本机目录安装，无远端仓库）。
+远端仓库：https://github.com/TreyDong/dsh-sidebar-plugin-fold
+
+本机（已链接目录安装）：
 
 ```bash
 plugin_manager install_bundle /Users/Treydong/Desktop/40_项目库/sidebar-plugin-fold
 ```
+
+通过插件市场一键安装（已在 web profile 配好索引源）：
+
+1. 侧栏 **Plugins** → **Discover** → **Add index source**。
+2. 填入本仓库的索引文件地址：
+   `https://raw.githubusercontent.com/TreyDong/dsh-sidebar-plugin-fold/main/index.json`
+3. 在 Discover 里找到 **Sidebar plugin fold**，点安装即可。
+
+索引文件为市场格式 1 的 `index.json`（仓库根目录），安装源是 git + 固定 commit；插件版本升级时更新其中的 `versions` 与 commit。
 
 安装后刷新一次浏览器页面即可看到侧栏「更多」菜单里的折叠区。
 
