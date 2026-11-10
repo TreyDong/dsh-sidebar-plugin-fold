@@ -39,19 +39,22 @@ window.__ModuleLoader__.load({
 .spf-action{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;line-height:18px;text-align:left;padding:6px 12px;border-radius:6px;cursor:pointer}
 .spf-action:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .spf-sep{height:1px;margin:6px 8px;background:var(--dsw-alias-border-l1)}
-.spf-row{display:flex;align-items:center;gap:2px}
-.spf-toggle{flex:1 1 auto;display:flex;align-items:center;gap:8px;min-width:0;border:0;background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;line-height:18px;text-align:left;padding:6px 12px;border-radius:6px;cursor:pointer}
+.spf-row{display:flex;align-items:center;gap:1px;padding-right:4px}
+.spf-toggle{flex:1 1 auto;display:flex;align-items:center;gap:8px;min-width:0;border:0;background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;line-height:18px;text-align:left;padding:6px 6px 6px 12px;border-radius:6px;cursor:pointer}
 .spf-toggle:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.spf-toggle.spf-static{cursor:default}
+.spf-toggle.spf-static:hover{background:transparent}
 .spf-box{flex:none;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;border:1.5px solid var(--dsw-alias-border-l2);color:#fff;font-size:10px;line-height:1}
 .spf-box[data-on="true"]{background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary)}
+.spf-box.spf-fixed{border-style:dashed;border-color:var(--dsw-alias-border-l1);color:var(--dsw-alias-label-tertiary)}
 .spf-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .spf-name[data-hidden="true"]{color:var(--dsw-alias-label-tertiary)}
-.spf-open{flex:none;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;padding:6px 10px;border-radius:6px;cursor:pointer}
-.spf-open:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
-.spf-move{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1;cursor:pointer}
+.spf-move{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1;cursor:pointer}
 .spf-move:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.spf-move:disabled{opacity:.35;cursor:default}
-.spf-orderName{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary);padding:0 4px}
+.spf-move:disabled{opacity:.3;cursor:default}
+.spf-headerRight{display:inline-flex;align-items:center;gap:2px}
+.spf-openIcon{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1;cursor:pointer}
+.spf-openIcon:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .spf-empty{padding:6px 12px;font-size:12px;color:var(--dsw-alias-label-tertiary)}
 .spf-note{padding:2px 12px 6px;font-size:11px;color:var(--dsw-alias-label-tertiary)}
 `;
@@ -104,15 +107,27 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The More-menu section: one switch per plugin panel, one order control
-     * per panel, plus collapse-all.
+     * The More-menu section: one row per sidebar panel with its visibility
+     * switch and its up/down controls, plus collapse-all and reset-order.
      * @param props - Owner callbacks, the panel order store, and localized copy.
-     * @returns The menu rows of the fold and order sections.
+     * @returns The menu rows of the fold and order section.
      */
     function FoldMenu(props) {
       const { entries, onOpen, onPinnedChange, onDismiss, t, panels, onMove, onResetOrder } = props;
       const list = Array.isArray(entries) ? entries : [];
       const order = React.useSyncExternalStore(panels.subscribe, panels.getSnapshot, panels.getSnapshot);
+      const pinnedById = new Map(list.map((entry) => [entry.id, entry.pinned !== false]));
+      const rows = order.map((panel) => ({
+        id: panel.id,
+        label: panel.label,
+        // Plugins is pinned by the sidebar itself and never listed in the
+        // owner's entries, so it can be reordered but not hidden.
+        foldable: pinnedById.has(panel.id),
+        pinned: pinnedById.get(panel.id) ?? true,
+      }));
+      const foldable = rows.filter((row) => row.foldable);
+      const visible = foldable.filter((row) => row.pinned).length;
+      const allHidden = foldable.length > 0 && foldable.every((row) => !row.pinned);
 
       // The sidebar forgets its unpinned set on every reload; restore the
       // remembered folds as soon as this menu opens.
@@ -132,8 +147,6 @@ window.__ModuleLoader__.load({
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
 
-      const hiddenOf = (rows) => rows.filter((entry) => entry.pinned === false).map((entry) => entry.id);
-
       const setHidden = (ids) => {
         writeList(STORAGE_KEY, ids);
         for (const entry of list) {
@@ -142,84 +155,78 @@ window.__ModuleLoader__.load({
         }
       };
 
-      const toggle = (entry) => {
-        const hidden = hiddenOf(list);
-        const next = entry.pinned
-          ? [...hidden, entry.id]
-          : hidden.filter((id) => id !== entry.id);
-        setHidden(next);
+      const toggle = (row) => {
+        if (!row.foldable) return;
+        const hidden = foldable.filter((candidate) => !candidate.pinned).map((candidate) => candidate.id);
+        setHidden(row.pinned ? [...hidden, row.id] : hidden.filter((id) => id !== row.id));
       };
-
-      const allHidden = list.length > 0 && list.every((entry) => entry.pinned === false);
-      const visible = list.filter((entry) => entry.pinned !== false).length;
 
       return h('div', { className: 'spf-group', role: 'group', 'aria-label': t('group') },
         h('div', { className: 'spf-header' },
           h('span', null, t('group')),
-          h('span', { className: 'spf-headerCount' }, t('count', { visible, total: list.length }))),
-        h('div', { className: 'spf-sep' }),
-        list.length === 0
-          ? h('div', { className: 'spf-empty' }, t('empty'))
-          : h('div', null, list.map((entry) => h('div', { className: 'spf-row', key: entry.id },
+          h('span', { className: 'spf-headerRight' },
+            h('span', { className: 'spf-headerCount' }, t('count', { visible, total: foldable.length })),
             h('button', {
               type: 'button',
-              role: 'menuitemcheckbox',
-              'aria-checked': entry.pinned !== false,
-              className: 'spf-toggle',
-              onClick: () => toggle(entry),
-            },
-              h('span', { className: 'spf-box', 'data-on': entry.pinned !== false ? 'true' : 'false', 'aria-hidden': 'true' },
-                entry.pinned !== false ? '✓' : ''),
-              h('span', { className: 'spf-name', 'data-hidden': entry.pinned === false ? 'true' : 'false' }, entry.label)),
+              className: 'spf-move',
+              title: t('resetOrder'),
+              'aria-label': t('resetOrder'),
+              onClick: () => onResetOrder(),
+            }, '↺'))),
+        h('div', { className: 'spf-sep' }),
+        rows.length === 0
+          ? h('div', { className: 'spf-empty' }, t('empty'))
+          : h('div', { role: 'none' }, rows.map((row, index) => h('div', { className: 'spf-row', key: row.id },
+            row.foldable
+              ? h('button', {
+                type: 'button',
+                role: 'menuitemcheckbox',
+                'aria-checked': row.pinned,
+                className: 'spf-toggle',
+                onClick: () => toggle(row),
+              },
+                h('span', { className: 'spf-box', 'data-on': row.pinned ? 'true' : 'false', 'aria-hidden': 'true' },
+                  row.pinned ? '✓' : ''),
+                h('span', { className: 'spf-name', 'data-hidden': row.pinned ? 'false' : 'true' }, row.label))
+              : h('span', { className: 'spf-toggle spf-static', title: t('alwaysShown') },
+                h('span', { className: 'spf-box spf-fixed', 'aria-hidden': 'true' }, '–'),
+                h('span', { className: 'spf-name' }, row.label)),
             h('button', {
               type: 'button',
               role: 'menuitem',
-              className: 'spf-open',
-              title: t('open'),
+              className: 'spf-move',
+              'aria-label': `${t('moveUp')}: ${row.label}`,
+              title: t('moveUp'),
+              disabled: index === 0,
+              onClick: () => onMove(row.id, -1),
+            }, '↑'),
+            h('button', {
+              type: 'button',
+              role: 'menuitem',
+              className: 'spf-move',
+              'aria-label': `${t('moveDown')}: ${row.label}`,
+              title: t('moveDown'),
+              disabled: index === rows.length - 1,
+              onClick: () => onMove(row.id, 1),
+            }, '↓'),
+            h('button', {
+              type: 'button',
+              role: 'menuitem',
+              className: 'spf-openIcon',
+              title: `${t('open')}: ${row.label}`,
+              'aria-label': `${t('open')}: ${row.label}`,
               onClick: () => {
-                onOpen(entry.id);
+                onOpen(row.id);
                 onDismiss();
               },
-            }, t('open'))))),
+            }, '↗')))),
         h('div', { className: 'spf-sep' }),
         h('button', {
           type: 'button',
           role: 'menuitem',
           className: 'spf-action',
-          onClick: () => setHidden(allHidden ? [] : list.map((entry) => entry.id)),
+          onClick: () => setHidden(allHidden ? [] : foldable.map((row) => row.id)),
         }, allHidden ? t('expandAll') : t('collapseAll')),
-        h('div', { className: 'spf-sep' }),
-        h('div', { className: 'spf-header' },
-          h('span', null, t('orderGroup')),
-          h('button', {
-            type: 'button',
-            className: 'spf-move',
-            title: t('resetOrder'),
-            'aria-label': t('resetOrder'),
-            onClick: () => onResetOrder(),
-          }, '↺')),
-        order.length === 0
-          ? h('div', { className: 'spf-empty' }, t('emptyOrder'))
-          : h('div', null, order.map((panel, index) => h('div', { className: 'spf-row', key: panel.id },
-            h('button', {
-              type: 'button',
-              role: 'menuitem',
-              className: 'spf-move',
-              'aria-label': `${t('moveUp')}: ${panel.label}`,
-              title: t('moveUp'),
-              disabled: index === 0,
-              onClick: () => onMove(panel.id, -1),
-            }, '↑'),
-            h('span', { className: 'spf-orderName' }, panel.label),
-            h('button', {
-              type: 'button',
-              role: 'menuitem',
-              className: 'spf-move',
-              'aria-label': `${t('moveDown')}: ${panel.label}`,
-              title: t('moveDown'),
-              disabled: index === order.length - 1,
-              onClick: () => onMove(panel.id, 1),
-            }, '↓')))),
         restored > 0 ? h('div', { className: 'spf-note' }, t('restored', { count: restored })) : null);
     }
 
@@ -233,10 +240,9 @@ window.__ModuleLoader__.load({
             empty: '当前没有可折叠的插件入口。',
             restored: '已恢复上次的折叠（{count} 项）',
             open: '打开',
+            alwaysShown: '始终显示',
             collapseAll: '全部收起',
             expandAll: '全部展开',
-            orderGroup: '调整顺序',
-            orderEmpty: '当前没有可排序的插件入口。',
             moveUp: '上移',
             moveDown: '下移',
             resetOrder: '恢复默认顺序',
@@ -247,10 +253,9 @@ window.__ModuleLoader__.load({
             empty: 'No plugin entry can be folded right now.',
             restored: 'Restored your last fold ({count} hidden)',
             open: 'Open',
+            alwaysShown: 'Always shown',
             collapseAll: 'Collapse all',
             expandAll: 'Expand all',
-            orderGroup: 'Reorder entries',
-            orderEmpty: 'No plugin entry can be reordered right now.',
             moveUp: 'Move up',
             moveDown: 'Move down',
             resetOrder: 'Reset order',
@@ -261,10 +266,9 @@ window.__ModuleLoader__.load({
             empty: '折りたたみ可能なプラグイン項目はありません。',
             restored: '前回の折りたたみを復元しました（{count} 件）',
             open: '開く',
+            alwaysShown: '常に表示',
             collapseAll: 'すべて折りたたむ',
             expandAll: 'すべて展開',
-            orderGroup: '並び順を変更',
-            orderEmpty: '並べ替えできるプラグイン項目はありません。',
             moveUp: '上へ',
             moveDown: '下へ',
             resetOrder: '既定の順序に戻す',
@@ -275,10 +279,9 @@ window.__ModuleLoader__.load({
             empty: 'Ahora mismo no hay entradas de complemento que plegar.',
             restored: 'Se restauró tu último plegado ({count} ocultos)',
             open: 'Abrir',
+            alwaysShown: 'Siempre visible',
             collapseAll: 'Plegar todo',
             expandAll: 'Desplegar todo',
-            orderGroup: 'Reordenar entradas',
-            orderEmpty: 'Ahora mismo no hay entradas que reordenar.',
             moveUp: 'Subir',
             moveDown: 'Bajar',
             resetOrder: 'Restablecer el orden',
@@ -289,10 +292,9 @@ window.__ModuleLoader__.load({
             empty: 'Aucune entrée de plugin à replier pour le moment.',
             restored: 'Votre dernier repli a été restauré ({count} masqués)',
             open: 'Ouvrir',
+            alwaysShown: 'Toujours affiché',
             collapseAll: 'Tout replier',
             expandAll: 'Tout déplier',
-            orderGroup: 'Réordonner les entrées',
-            orderEmpty: 'Aucune entrée à réordonner pour le moment.',
             moveUp: 'Monter',
             moveDown: 'Descendre',
             resetOrder: 'Réinitialiser l\'ordre',
@@ -303,10 +305,9 @@ window.__ModuleLoader__.load({
             empty: 'Zurzeit gibt es keinen Plugin-Eintrag zum Einklappen.',
             restored: 'Letzte Einklappung wiederhergestellt ({count} ausgeblendet)',
             open: 'Öffnen',
+            alwaysShown: 'Immer sichtbar',
             collapseAll: 'Alle einklappen',
             expandAll: 'Alle ausklappen',
-            orderGroup: 'Einträge umsortieren',
-            orderEmpty: 'Zurzeit gibt es keinen Eintrag zum Umsortieren.',
             moveUp: 'Nach oben',
             moveDown: 'Nach unten',
             resetOrder: 'Reihenfolge zurücksetzen',
@@ -317,10 +318,9 @@ window.__ModuleLoader__.load({
             empty: 'Сейчас нет записей плагинов для сворачивания.',
             restored: 'Восстановлено последнее сворачивание ({count} скрыто)',
             open: 'Открыть',
+            alwaysShown: 'Всегда показано',
             collapseAll: 'Свернуть все',
             expandAll: 'Развернуть все',
-            orderGroup: 'Изменить порядок',
-            orderEmpty: 'Сейчас нет записей для сортировки.',
             moveUp: 'Выше',
             moveDown: 'Ниже',
             resetOrder: 'Сбросить порядок',
@@ -331,10 +331,9 @@ window.__ModuleLoader__.load({
             empty: 'No momento não há entradas de plug-in para recolher.',
             restored: 'Recolhimento anterior restaurado ({count} ocultos)',
             open: 'Abrir',
+            alwaysShown: 'Sempre visível',
             collapseAll: 'Recolher tudo',
             expandAll: 'Expandir tudo',
-            orderGroup: 'Reordenar entradas',
-            orderEmpty: 'No momento não há entradas para reordenar.',
             moveUp: 'Subir',
             moveDown: 'Descer',
             resetOrder: 'Restaurar a ordem',
