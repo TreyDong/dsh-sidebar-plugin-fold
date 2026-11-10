@@ -39,7 +39,12 @@ window.__ModuleLoader__.load({
 .spf-action{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;line-height:18px;text-align:left;padding:6px 12px;border-radius:6px;cursor:pointer}
 .spf-action:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .spf-sep{height:1px;margin:6px 8px;background:var(--dsw-alias-border-l1)}
-.spf-row{display:flex;align-items:center;gap:1px;padding-right:4px}
+.spf-row{display:flex;align-items:center;gap:1px;padding-right:4px;border-radius:6px}
+.spf-row[data-dragging="true"]{opacity:.45}
+.spf-row[data-drop="before"]{box-shadow:inset 0 2px 0 var(--dsw-alias-brand-primary)}
+.spf-row[data-drop="after"]{box-shadow:inset 0 -2px 0 var(--dsw-alias-brand-primary)}
+.spf-grip{flex:none;display:inline-flex;align-items:center;justify-content:center;width:12px;height:20px;margin-left:4px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1;cursor:grab;touch-action:none;user-select:none}
+.spf-grip:active{cursor:grabbing;color:var(--dsw-alias-label-primary)}
 .spf-toggle{flex:1 1 auto;display:flex;align-items:center;gap:8px;min-width:0;border:0;background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;line-height:18px;text-align:left;padding:6px 6px 6px 12px;border-radius:6px;cursor:pointer}
 .spf-toggle:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .spf-toggle.spf-static{cursor:default}
@@ -113,7 +118,7 @@ window.__ModuleLoader__.load({
      * @returns The menu rows of the fold and order section.
      */
     function FoldMenu(props) {
-      const { entries, onOpen, onPinnedChange, onDismiss, t, panels, onMove, onResetOrder } = props;
+      const { entries, onOpen, onPinnedChange, onDismiss, t, panels, onMove, onReorder, onResetOrder } = props;
       const list = Array.isArray(entries) ? entries : [];
       const order = React.useSyncExternalStore(panels.subscribe, panels.getSnapshot, panels.getSnapshot);
       const pinnedById = new Map(list.map((entry) => [entry.id, entry.pinned !== false]));
@@ -161,6 +166,65 @@ window.__ModuleLoader__.load({
         setHidden(row.pinned ? [...hidden, row.id] : hidden.filter((id) => id !== row.id));
       };
 
+      // Pointer-based drag reordering: the grip starts the drag, the pointer's
+      // vertical position chooses the insertion point, release commits it.
+      const listRef = React.useRef(null);
+      const rowEls = React.useRef(new Map());
+      const [dragId, setDragId] = React.useState(null);
+      const [dropIndex, setDropIndex] = React.useState(null);
+
+      const startDrag = (event, row) => {
+        if (event.button !== 0 && event.pointerType === 'mouse') return;
+        event.preventDefault();
+        const target = event.currentTarget;
+        try {
+          target.setPointerCapture?.(event.pointerId);
+        } catch {
+          // Pointer capture is best-effort; window listeners cover the rest.
+        }
+        setDragId(row.id);
+        const move = (moveEvent) => {
+          const boxes = [...rowEls.current.entries()]
+            .map(([id, element]) => {
+              const rect = element.getBoundingClientRect();
+              return { id, middle: rect.top + rect.height / 2 };
+            })
+            .sort((a, b) => a.middle - b.middle);
+          let insertion = boxes.findIndex((box) => moveEvent.clientY < box.middle);
+          if (insertion === -1) insertion = boxes.length;
+          setDropIndex(insertion);
+        };
+        const finish = (upEvent) => {
+          window.removeEventListener('pointermove', move);
+          window.removeEventListener('pointerup', finish);
+          window.removeEventListener('pointercancel', finish);
+          setDragId(null);
+          const boxes = [...rowEls.current.entries()]
+            .map(([id, element]) => {
+              const rect = element.getBoundingClientRect();
+              return { id, middle: rect.top + rect.height / 2 };
+            })
+            .sort((a, b) => a.middle - b.middle);
+          let insertion = boxes.findIndex((box) => upEvent.clientY < box.middle);
+          if (insertion === -1) insertion = boxes.length;
+          setDropIndex(null);
+          const from = rows.findIndex((candidate) => candidate.id === row.id);
+          let to = insertion;
+          if (to > from) to -= 1;
+          if (from !== -1 && to !== from) onReorder(row.id, to);
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', finish);
+        window.addEventListener('pointercancel', finish);
+      };
+
+      const dropEdge = (index) => {
+        if (dropIndex === null) return null;
+        if (dropIndex === index) return 'before';
+        if (dropIndex === index + 1) return 'after';
+        return null;
+      };
+
       return h('div', { className: 'spf-group', role: 'group', 'aria-label': t('group') },
         h('div', { className: 'spf-header' },
           h('span', null, t('group')),
@@ -176,7 +240,28 @@ window.__ModuleLoader__.load({
         h('div', { className: 'spf-sep' }),
         rows.length === 0
           ? h('div', { className: 'spf-empty' }, t('empty'))
-          : h('div', { role: 'none' }, rows.map((row, index) => h('div', { className: 'spf-row', key: row.id },
+          : h('div', { role: 'none', ref: listRef }, rows.map((row, index) => h('div', {
+            key: row.id,
+            ref: (element) => {
+              if (element === null) rowEls.current.delete(row.id);
+              else rowEls.current.set(row.id, element);
+            },
+            className: 'spf-row',
+            'data-drop': dropEdge(index),
+            'data-dragging': dragId === row.id ? 'true' : undefined,
+            onPointerMove: (moveEvent) => {
+              // The drag itself listens on window; this only styles the row under the pointer.
+              if (dragId === null) return;
+              moveEvent.preventDefault();
+            },
+          },
+            h('span', {
+              className: 'spf-grip',
+              draggable: false,
+              title: t('dragHint'),
+              'aria-hidden': 'true',
+              onPointerDown: (event) => startDrag(event, row),
+            }, '⠿'),
             row.foldable
               ? h('button', {
                 type: 'button',
@@ -241,6 +326,7 @@ window.__ModuleLoader__.load({
             restored: '已恢复上次的折叠（{count} 项）',
             open: '打开',
             alwaysShown: '始终显示',
+            dragHint: '拖动排序',
             collapseAll: '全部收起',
             expandAll: '全部展开',
             moveUp: '上移',
@@ -254,6 +340,7 @@ window.__ModuleLoader__.load({
             restored: 'Restored your last fold ({count} hidden)',
             open: 'Open',
             alwaysShown: 'Always shown',
+            dragHint: 'Drag to reorder',
             collapseAll: 'Collapse all',
             expandAll: 'Expand all',
             moveUp: 'Move up',
@@ -267,6 +354,7 @@ window.__ModuleLoader__.load({
             restored: '前回の折りたたみを復元しました（{count} 件）',
             open: '開く',
             alwaysShown: '常に表示',
+            dragHint: 'ドラッグで並べ替え',
             collapseAll: 'すべて折りたたむ',
             expandAll: 'すべて展開',
             moveUp: '上へ',
@@ -280,6 +368,7 @@ window.__ModuleLoader__.load({
             restored: 'Se restauró tu último plegado ({count} ocultos)',
             open: 'Abrir',
             alwaysShown: 'Siempre visible',
+            dragHint: 'Arrastra para reordenar',
             collapseAll: 'Plegar todo',
             expandAll: 'Desplegar todo',
             moveUp: 'Subir',
@@ -293,6 +382,7 @@ window.__ModuleLoader__.load({
             restored: 'Votre dernier repli a été restauré ({count} masqués)',
             open: 'Ouvrir',
             alwaysShown: 'Toujours affiché',
+            dragHint: 'Glisser pour réordonner',
             collapseAll: 'Tout replier',
             expandAll: 'Tout déplier',
             moveUp: 'Monter',
@@ -306,6 +396,7 @@ window.__ModuleLoader__.load({
             restored: 'Letzte Einklappung wiederhergestellt ({count} ausgeblendet)',
             open: 'Öffnen',
             alwaysShown: 'Immer sichtbar',
+            dragHint: 'Zum Umsortieren ziehen',
             collapseAll: 'Alle einklappen',
             expandAll: 'Alle ausklappen',
             moveUp: 'Nach oben',
@@ -319,6 +410,7 @@ window.__ModuleLoader__.load({
             restored: 'Восстановлено последнее сворачивание ({count} скрыто)',
             open: 'Открыть',
             alwaysShown: 'Всегда показано',
+            dragHint: 'Перетащите, чтобы изменить порядок',
             collapseAll: 'Свернуть все',
             expandAll: 'Развернуть все',
             moveUp: 'Выше',
@@ -332,6 +424,7 @@ window.__ModuleLoader__.load({
             restored: 'Recolhimento anterior restaurado ({count} ocultos)',
             open: 'Abrir',
             alwaysShown: 'Sempre visível',
+            dragHint: 'Arraste para reordenar',
             collapseAll: 'Recolher tudo',
             expandAll: 'Expandir tudo',
             moveUp: 'Subir',
@@ -445,6 +538,19 @@ window.__ModuleLoader__.load({
           rebuildShadows();
         };
 
+        const reorder = (id, toIndex) => {
+          const originals = originalsOf();
+          const desired = desiredOrder(originals);
+          const from = desired.indexOf(id);
+          if (from < 0) return;
+          const next = [...desired];
+          next.splice(from, 1);
+          next.splice(Math.max(0, Math.min(toIndex, next.length)), 0, id);
+          if (next.every((candidate, index) => candidate === desired[index])) return;
+          writeList(ORDER_KEY, next);
+          rebuildShadows();
+        };
+
         const resetOrder = () => {
           writeList(ORDER_KEY, []);
           rebuildShadows();
@@ -476,6 +582,7 @@ window.__ModuleLoader__.load({
               t: ctx.locale.bind(NS),
               panels,
               onMove: move,
+              onReorder: reorder,
               onResetOrder: resetOrder,
             }),
           }, FoldMenu));
