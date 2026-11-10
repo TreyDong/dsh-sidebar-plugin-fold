@@ -40,7 +40,6 @@ DSH 插件：折叠并重排左侧栏里的插件入口，把不常用的行收�
 | `client.js` | 浏览器半边：折叠区与排序区渲染、影子条目接管、localStorage 记忆 |
 | `locale/en.json` `locale/zh.json` | 插件管理器里的标题与描述 |
 | `icon.svg` | 插件管理器图标 |
-| `notes/` | 工程记录 |
 
 ## 安装
 
@@ -65,4 +64,4 @@ plugin_manager install_bundle /Users/Treydong/Desktop/40_项目库/sidebar-plugi
 
 ## 验证
 
-见 `notes/2026-11-06-sidebar-plugin-fold.md`。
+开发记录保存在本地，不随仓库公开。
