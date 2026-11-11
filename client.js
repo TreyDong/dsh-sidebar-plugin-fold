@@ -47,11 +47,8 @@ window.__ModuleLoader__.load({
 .spf-grip:active{cursor:grabbing;color:var(--dsw-alias-label-primary)}
 .spf-toggle{flex:1 1 auto;display:flex;align-items:center;gap:8px;min-width:0;border:0;background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;line-height:18px;text-align:left;padding:6px 6px 6px 12px;border-radius:6px;cursor:pointer}
 .spf-toggle:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.spf-toggle.spf-static{cursor:default}
-.spf-toggle.spf-static:hover{background:transparent}
 .spf-box{flex:none;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;border:1.5px solid var(--dsw-alias-border-l2);color:#fff;font-size:10px;line-height:1}
 .spf-box[data-on="true"]{background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary)}
-.spf-box.spf-fixed{border-style:dashed;border-color:var(--dsw-alias-border-l1);color:var(--dsw-alias-label-tertiary)}
 .spf-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .spf-name[data-hidden="true"]{color:var(--dsw-alias-label-tertiary)}
 .spf-move{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1;cursor:pointer}
@@ -73,6 +70,25 @@ window.__ModuleLoader__.load({
       tag.dataset.pluginCss = tagId;
       tag.textContent = CSS;
       document.head.appendChild(tag);
+    }
+
+    /** The style tag that hides the sidebar rows the host refuses to unpin. */
+    function hiddenStyleTag() {
+      if (typeof document === 'undefined') return null;
+      const tagId = '@local/sidebar-plugin-fold/hidden.css';
+      let tag = document.querySelector(`style[data-plugin-css="${tagId}"]`);
+      if (tag === null) {
+        tag = document.createElement('style');
+        tag.dataset.plugin = '@local/sidebar-plugin-fold';
+        tag.dataset.pluginCss = tagId;
+        document.head.appendChild(tag);
+      }
+      return tag;
+    }
+
+    /** Escape a label for use inside a CSS attribute selector. */
+    function escapeAttribute(value) {
+      return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     }
 
     function readList(key) {
@@ -118,20 +134,32 @@ window.__ModuleLoader__.load({
      * @returns The menu rows of the fold and order section.
      */
     function FoldMenu(props) {
-      const { entries, onOpen, onPinnedChange, onDismiss, t, panels, onMove, onReorder, onResetOrder } = props;
+      const { entries, onOpen, onPinnedChange, onDismiss, t, panels, onMove, onReorder, onResetOrder, onHiddenChange, onHostEntries } = props;
       const list = Array.isArray(entries) ? entries : [];
       const order = React.useSyncExternalStore(panels.subscribe, panels.getSnapshot, panels.getSnapshot);
       const pinnedById = new Map(list.map((entry) => [entry.id, entry.pinned !== false]));
-      const rows = order.map((panel) => ({
-        id: panel.id,
-        label: panel.label,
-        // Plugins is pinned by the sidebar itself and never listed in the
-        // owner's entries, so it can be reordered but not hidden.
-        foldable: pinnedById.has(panel.id),
-        pinned: pinnedById.get(panel.id) ?? true,
-      }));
-      const foldable = rows.filter((row) => row.foldable);
+      const storedHidden = readList(STORAGE_KEY);
+      const rows = order.map((panel) => {
+        // The sidebar keeps its own Plugins entry visible and never lists it
+        // among the owner's entries, so that one is hidden with a style rule
+        // instead of the sidebar's own pin state.
+        const hostFoldable = pinnedById.has(panel.id);
+        return {
+          id: panel.id,
+          label: panel.label,
+          foldable: true,
+          hostFoldable,
+          pinned: hostFoldable ? (pinnedById.get(panel.id) ?? true) : !storedHidden.includes(panel.id),
+        };
+      });
+      const foldable = rows;
       const visible = foldable.filter((row) => row.pinned).length;
+      const hostIds = list.map((entry) => entry.id).join(',');
+      React.useEffect(() => {
+        onHostEntries(list.map((entry) => entry.id));
+        // The owner's entry list changes when a panel appears or disappears.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [hostIds]);
       const allHidden = foldable.length > 0 && foldable.every((row) => !row.pinned);
 
       // The sidebar forgets its unpinned set on every reload; restore the
@@ -152,18 +180,12 @@ window.__ModuleLoader__.load({
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
 
-      const setHidden = (ids) => {
-        writeList(STORAGE_KEY, ids);
-        for (const entry of list) {
-          const shouldShow = !ids.includes(entry.id);
-          if (entry.pinned !== shouldShow) onPinnedChange(entry.id, shouldShow);
-        }
-      };
-
       const toggle = (row) => {
         if (!row.foldable) return;
         const hidden = foldable.filter((candidate) => !candidate.pinned).map((candidate) => candidate.id);
-        setHidden(row.pinned ? [...hidden, row.id] : hidden.filter((id) => id !== row.id));
+        const next = row.pinned ? [...hidden, row.id] : hidden.filter((id) => id !== row.id);
+        onHiddenChange(next);
+        if (row.hostFoldable) onPinnedChange(row.id, !row.pinned);
       };
 
       // Pointer-based drag reordering: the grip starts the drag, the pointer's
@@ -262,20 +284,16 @@ window.__ModuleLoader__.load({
               'aria-hidden': 'true',
               onPointerDown: (event) => startDrag(event, row),
             }, '⠿'),
-            row.foldable
-              ? h('button', {
-                type: 'button',
-                role: 'menuitemcheckbox',
-                'aria-checked': row.pinned,
-                className: 'spf-toggle',
-                onClick: () => toggle(row),
-              },
-                h('span', { className: 'spf-box', 'data-on': row.pinned ? 'true' : 'false', 'aria-hidden': 'true' },
-                  row.pinned ? '✓' : ''),
-                h('span', { className: 'spf-name', 'data-hidden': row.pinned ? 'false' : 'true' }, row.label))
-              : h('span', { className: 'spf-toggle spf-static', title: t('alwaysShown') },
-                h('span', { className: 'spf-box spf-fixed', 'aria-hidden': 'true' }, '–'),
-                h('span', { className: 'spf-name' }, row.label)),
+            h('button', {
+              type: 'button',
+              role: 'menuitemcheckbox',
+              'aria-checked': row.pinned,
+              className: 'spf-toggle',
+              onClick: () => toggle(row),
+            },
+              h('span', { className: 'spf-box', 'data-on': row.pinned ? 'true' : 'false', 'aria-hidden': 'true' },
+                row.pinned ? '✓' : ''),
+              h('span', { className: 'spf-name', 'data-hidden': row.pinned ? 'false' : 'true' }, row.label)),
             h('button', {
               type: 'button',
               role: 'menuitem',
@@ -310,7 +328,11 @@ window.__ModuleLoader__.load({
           type: 'button',
           role: 'menuitem',
           className: 'spf-action',
-          onClick: () => setHidden(allHidden ? [] : foldable.map((row) => row.id)),
+          onClick: () => {
+            const next = allHidden ? [] : foldable.map((row) => row.id);
+            onHiddenChange(next);
+            for (const entry of list) onPinnedChange(entry.id, !next.includes(entry.id));
+          },
         }, allHidden ? t('expandAll') : t('collapseAll')),
         restored > 0 ? h('div', { className: 'spf-note' }, t('restored', { count: restored })) : null);
     }
@@ -325,7 +347,6 @@ window.__ModuleLoader__.load({
             empty: '当前没有可折叠的插件入口。',
             restored: '已恢复上次的折叠（{count} 项）',
             open: '打开',
-            alwaysShown: '始终显示',
             dragHint: '拖动排序',
             collapseAll: '全部收起',
             expandAll: '全部展开',
@@ -339,7 +360,6 @@ window.__ModuleLoader__.load({
             empty: 'No plugin entry can be folded right now.',
             restored: 'Restored your last fold ({count} hidden)',
             open: 'Open',
-            alwaysShown: 'Always shown',
             dragHint: 'Drag to reorder',
             collapseAll: 'Collapse all',
             expandAll: 'Expand all',
@@ -353,7 +373,6 @@ window.__ModuleLoader__.load({
             empty: '折りたたみ可能なプラグイン項目はありません。',
             restored: '前回の折りたたみを復元しました（{count} 件）',
             open: '開く',
-            alwaysShown: '常に表示',
             dragHint: 'ドラッグで並べ替え',
             collapseAll: 'すべて折りたたむ',
             expandAll: 'すべて展開',
@@ -367,7 +386,6 @@ window.__ModuleLoader__.load({
             empty: 'Ahora mismo no hay entradas de complemento que plegar.',
             restored: 'Se restauró tu último plegado ({count} ocultos)',
             open: 'Abrir',
-            alwaysShown: 'Siempre visible',
             dragHint: 'Arrastra para reordenar',
             collapseAll: 'Plegar todo',
             expandAll: 'Desplegar todo',
@@ -381,7 +399,6 @@ window.__ModuleLoader__.load({
             empty: 'Aucune entrée de plugin à replier pour le moment.',
             restored: 'Votre dernier repli a été restauré ({count} masqués)',
             open: 'Ouvrir',
-            alwaysShown: 'Toujours affiché',
             dragHint: 'Glisser pour réordonner',
             collapseAll: 'Tout replier',
             expandAll: 'Tout déplier',
@@ -395,7 +412,6 @@ window.__ModuleLoader__.load({
             empty: 'Zurzeit gibt es keinen Plugin-Eintrag zum Einklappen.',
             restored: 'Letzte Einklappung wiederhergestellt ({count} ausgeblendet)',
             open: 'Öffnen',
-            alwaysShown: 'Immer sichtbar',
             dragHint: 'Zum Umsortieren ziehen',
             collapseAll: 'Alle einklappen',
             expandAll: 'Alle ausklappen',
@@ -409,7 +425,6 @@ window.__ModuleLoader__.load({
             empty: 'Сейчас нет записей плагинов для сворачивания.',
             restored: 'Восстановлено последнее сворачивание ({count} скрыто)',
             open: 'Открыть',
-            alwaysShown: 'Всегда показано',
             dragHint: 'Перетащите, чтобы изменить порядок',
             collapseAll: 'Свернуть все',
             expandAll: 'Развернуть все',
@@ -423,7 +438,6 @@ window.__ModuleLoader__.load({
             empty: 'No momento não há entradas de plug-in para recolher.',
             restored: 'Recolhimento anterior restaurado ({count} ocultos)',
             open: 'Abrir',
-            alwaysShown: 'Sempre visível',
             dragHint: 'Arraste para reordenar',
             collapseAll: 'Recolher tudo',
             expandAll: 'Expandir tudo',
@@ -471,6 +485,39 @@ window.__ModuleLoader__.load({
           return [...stored, ...rest];
         };
 
+        // The sidebar owns its pin state for the panels it lists, but it keeps
+        // its own Plugins entry visible and refuses to unpin it. Those panels
+        // are hidden with a style rule on the sidebar's row instead.
+        let hostPinnable = new Set();
+
+        const updateHiddenCss = () => {
+          const tag = hiddenStyleTag();
+          if (tag === null) return;
+          const originals = originalsOf();
+          const rules = [];
+          for (const id of readList(STORAGE_KEY)) {
+            if (hostPinnable.has(id)) continue;
+            const entry = originals.get(id);
+            if (entry === undefined) continue;
+            const label = labelOf(entry);
+            if (label === undefined) continue;
+            rules.push(`nav[aria-label] > button[aria-label="${escapeAttribute(label)}"]{display:none}`);
+          }
+          tag.textContent = rules.join('\n');
+        };
+
+        const persistHidden = (ids) => {
+          writeList(STORAGE_KEY, ids);
+          updateHiddenCss();
+        };
+
+        const setHostPinnable = (ids) => {
+          const next = new Set(ids);
+          if (next.size === hostPinnable.size && [...next].every((id) => hostPinnable.has(id))) return;
+          hostPinnable = next;
+          updateHiddenCss();
+        };
+
         const disposeShadows = () => {
           for (const dispose of shadowDisposers.splice(0)) {
             try {
@@ -514,6 +561,7 @@ window.__ModuleLoader__.load({
             id,
             label: labelOf(originals.get(id)) ?? id,
           })));
+          updateHiddenCss();
         };
 
         const sameOriginals = (a, b) => {
@@ -556,6 +604,10 @@ window.__ModuleLoader__.load({
           rebuildShadows();
         };
 
+        ctx.effect(() => ctx.locale.subscribe(() => {
+          updateHiddenCss();
+        }), 'sidebar-plugin-fold: hidden rules on locale change');
+
         ctx.effect(() => {
           const dispose = ctx.slots.inject('sidebar.panellist', () => {
             const unsubscribe = ctx.slots.subscribe('sidebar.panellist', () => {
@@ -583,6 +635,8 @@ window.__ModuleLoader__.load({
               panels,
               onMove: move,
               onReorder: reorder,
+              onHiddenChange: persistHidden,
+              onHostEntries: setHostPinnable,
               onResetOrder: resetOrder,
             }),
           }, FoldMenu));
