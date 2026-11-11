@@ -49,12 +49,12 @@
       },
       "versions": [
         {
-          "version": "1.3.0",
-          "publishTimestamp": 1794295939,
+          "version": "1.4.0",
+          "publishTimestamp": 1794376369,
           "source": {
             "type": "git",
             "url": "https://github.com/TreyDong/dsh-sidebar-plugin-fold.git",
-            "commit": "d9b8cbcbc2cee0256de4bf37843e5061397f25c1"
+            "commit": "01cd55fc97b918bca00193cbc5352551f9ad14aa"
           },
           "engines": {}
         }
