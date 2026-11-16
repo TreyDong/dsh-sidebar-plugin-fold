@@ -18,8 +18,8 @@ DSH 插件：折叠并重排左侧栏里的插件入口，把不常用的行收�
 - **↗**：直接打开该面板（被收起后也还能打开）。
 - 顶部显示可见数量（如 `showing 3/6`），旁边的 **↺** 恢复默认顺序。
 - 底部 **Collapse all / Expand all** 一键收起或展开全部。
-- 折叠选择写入 `localStorage`（`dsh.sidebar.plugin-fold.v1`），刷新页面后立刻生效。
-- 顺序写入 `localStorage`（`{{SECRET_i7o3hugf}}`），刷新后直接生效。
+- 折叠与顺序由宿主保管：插件的 Host 半边把它们写进 profile 目录下的 `.sidebar-plugin-fold/state.json`，浏览器通过 `/api/sidebar-plugin-fold/state` 读写；浏览器的 `localStorage` 只是页面启动时先用的缓存。
+- 顺序与折叠一起存，刷新、换浏览器、换端口都保持不变。
 
 侧栏按每个面板注册的 `order` 排序，而 `order` 属于注册它的那个插件，第三方改不了。可行做法是：槽位对同一个 id 只保留一个条目，优先级更低（数值更小）的条目先入选。于是本插件在用户设定过顺序时，为每个面板注册一份「影子条目」——同一个 id、同一个图标组件与标题、自己的 `order`、优先级 `-1`；用户点「恢复默认顺序」时影子条目被撤销，侧栏回到插件自带的顺序。插件自身重新注册时，影子条目会自动跟着更新。
 
@@ -27,9 +27,24 @@ DSH 插件：折叠并重排左侧栏里的插件入口，把不常用的行收�
 
 **More 按钮永远不隐藏**——它是折叠区、插件管理（Browse other plugins）等所有入口的所在，隐藏它就再也回不来了。
 
+## 状态存在哪
+
+`~/.dsh/profiles/<profile>/.sidebar-plugin-fold/state.json`（宿主侧，目录 0700、文件 0600）：
+
+```json
+{
+  "order": ["plugins", "banana-reader", "..."],
+  "hidden": ["banana-mail"]
+}
+```
+
+- Host 半边（`index.js`）在 `/api/sidebar-plugin-fold/state` 上注册一条精确路由：GET 读取，POST 写入；写入先写临时文件再改名，避免半截文件。
+- 浏览器半边启动时先读浏览器缓存（`localStorage`），再向宿主取一份；宿主有记录就以宿主的为准，没有就把浏览器这份推上去。
+- 每个 profile 一份，不同 profile 互不影响。
+
 ## 已知边界
 
-- 折叠与顺序状态由浏览器 `localStorage` 保存，换浏览器或清缓存后需要重新设置。
+- 状态跟着 profile 走，换机器或换 profile 需要重新设置一次。
 - 被样式规则隐藏的行按 aria-label 匹配；某个面板的本地化标题与别的面板重名时可能被一并隐藏（罕见）。
 - 带有子插槽或 store 的面板条目无法被影子条目接管，这类面板会排在被接管的面板之后。
 

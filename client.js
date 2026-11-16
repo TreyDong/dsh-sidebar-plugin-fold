@@ -28,6 +28,8 @@ window.__ModuleLoader__.load({
     const STORAGE_KEY = 'dsh.sidebar.plugin-fold.v1';
     const ORDER_KEY = '{{SECRET_i7o3hugf}}';
     const REGISTRANT = '@local/sidebar-plugin-fold';
+    // The Host route that keeps the layout in the profile directory.
+    const STATE_URL = 'api/sidebar-plugin-fold/state';
     // Below the priority every shipped panel entry uses (0), so a shadow
     // always wins its cell in the slot's per-id selection.
     const SHADOW_PRIORITY = -1;
@@ -509,6 +511,7 @@ window.__ModuleLoader__.load({
         const persistHidden = (ids) => {
           writeList(STORAGE_KEY, ids);
           updateHiddenCss();
+          saveToHost();
         };
 
         const setHostPinnable = (ids) => {
@@ -516,6 +519,48 @@ window.__ModuleLoader__.load({
           if (next.size === hostPinnable.size && [...next].every((id) => hostPinnable.has(id))) return;
           hostPinnable = next;
           updateHiddenCss();
+        };
+
+        // The Host keeps the layout in the profile directory; localStorage is
+        // only the fast cache the page applies first.
+        const hostState = () => ({
+          order: readList(ORDER_KEY),
+          hidden: readList(STORAGE_KEY),
+        });
+
+        const saveToHost = async () => {
+          try {
+            const response = await fetch(STATE_URL, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(hostState()),
+            });
+            if (!response.ok) throw new Error(`the host answered ${response.status}`);
+          } catch (error) {
+            console.warn('[sidebar-plugin-fold] could not save the layout to the host', error);
+          }
+        };
+
+        const loadFromHost = async () => {
+          try {
+            const response = await fetch(STATE_URL, { credentials: 'same-origin' });
+            if (!response.ok) throw new Error(`the host answered ${response.status}`);
+            const stored = await response.json();
+            if (stored === null || stored === undefined) {
+              // First run on this machine: keep what the browser already knows.
+              await saveToHost();
+              return;
+            }
+            const order = Array.isArray(stored.order) ? stored.order : [];
+            const hidden = Array.isArray(stored.hidden) ? stored.hidden : [];
+            if (order.length > 0) writeList(ORDER_KEY, order);
+            if (hidden.length > 0) writeList(STORAGE_KEY, hidden);
+            rebuildShadows();
+            updateHiddenCss();
+          } catch (error) {
+            console.warn('[sidebar-plugin-fold] could not read the layout from the host', error);
+          }
         };
 
         const disposeShadows = () => {
@@ -584,6 +629,7 @@ window.__ModuleLoader__.load({
           next.splice(target, 0, moved);
           writeList(ORDER_KEY, next);
           rebuildShadows();
+          saveToHost();
         };
 
         const reorder = (id, toIndex) => {
@@ -597,16 +643,22 @@ window.__ModuleLoader__.load({
           if (next.every((candidate, index) => candidate === desired[index])) return;
           writeList(ORDER_KEY, next);
           rebuildShadows();
+          saveToHost();
         };
 
         const resetOrder = () => {
           writeList(ORDER_KEY, []);
           rebuildShadows();
+          saveToHost();
         };
 
         ctx.effect(() => ctx.locale.subscribe(() => {
           updateHiddenCss();
         }), 'sidebar-plugin-fold: hidden rules on locale change');
+
+        ctx.effect(() => {
+          loadFromHost();
+        }, 'sidebar-plugin-fold: layout from the host');
 
         ctx.effect(() => {
           const dispose = ctx.slots.inject('sidebar.panellist', () => {
